@@ -102,8 +102,11 @@ fn render<F: Read + Write>(input: &str, output: &mut F) -> Result<()> {
         match event {
             Event::Start(tag) => {
                 match tag {
-                    Tag::Paragraph => {}
+                    Tag::Paragraph => {
+                        renderer.vertical_margin(1);
+                    }
                     Tag::Heading(size) => {
+                        renderer.vertical_margin(1);
                         // Center first.  This only takes effect at the
                         // start of the line, so end tag handling needs to
                         // specially account for it.
@@ -184,6 +187,7 @@ fn render<F: Read + Write>(input: &str, output: &mut F) -> Result<()> {
                         lists.push(first_item_number);
                     }
                     Tag::Item => {
+                        renderer.flush_line();
                         let item = lists.last_mut().expect("non-empty list list");
                         match *item {
                             Some(n) => {
@@ -219,12 +223,12 @@ fn render<F: Read + Write>(input: &str, output: &mut F) -> Result<()> {
             }
             Event::End(tag) => match tag {
                 Tag::Paragraph => {
-                    renderer.write("\n\n")?;
+                    renderer.vertical_margin(1);
                 }
                 Tag::Heading(_) => {
                     // peel off everything but the centering command
                     renderer.restore_format();
-                    renderer.write("\n\n")?;
+                    renderer.vertical_margin(1);
                     // peel off the centering command now that we're at
                     // the start of a line
                     renderer.restore_format();
@@ -249,11 +253,9 @@ fn render<F: Read + Write>(input: &str, output: &mut F) -> Result<()> {
                 }
                 Tag::List(_first_item_number) => {
                     lists.pop();
-                    renderer.write("\n")?;
                 }
                 Tag::Item => {
                     renderer.restore_format();
-                    renderer.write("\n")?;
                 }
                 Tag::FootnoteDefinition(_s) => {}
                 Tag::Table(_alignments) => {}
@@ -299,7 +301,7 @@ fn render<F: Read + Write>(input: &str, output: &mut F) -> Result<()> {
                 renderer.write(" ")?;
             }
             Event::HardBreak => {
-                renderer.write("\n\n")?;
+                renderer.vertical_margin(1);
             }
             Event::Rule => {
                 renderer.cut();

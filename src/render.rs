@@ -19,6 +19,7 @@ use bitflags::bitflags;
 use encoding::all::ASCII;
 use encoding::types::{EncoderTrap, Encoding};
 use image::{GrayImage, Luma};
+use std::cmp;
 use std::convert::TryFrom;
 use std::io::{Read, Write};
 use std::rc::Rc;
@@ -38,6 +39,9 @@ pub struct Renderer<F: Read + Write> {
 
     word: Vec<LineChar>,
     word_has_letters: bool,
+
+    // None indicates beginning of page
+    margin_lines: Option<usize>,
 }
 
 #[derive(Clone, Eq, PartialEq)]
@@ -86,6 +90,7 @@ impl<F: Read + Write> Renderer<F> {
             line_width: 0,
             word: Vec::new(),
             word_has_letters: false,
+            margin_lines: None,
         };
         // Reset printer
         renderer.spool(b"\x1b@");
@@ -210,10 +215,7 @@ impl<F: Read + Write> Renderer<F> {
             );
         }
 
-        // Flush line buffer if non-empty
-        if self.line_width > 0 {
-            self.spool_line();
-        }
+        self.flush_line();
 
         self.set_format(
             self.format()
@@ -261,15 +263,34 @@ impl<F: Read + Write> Renderer<F> {
 
     // Advance paper and perform partial cut
     pub fn cut(&mut self) {
-        // Flush line buffer if non-empty
+        self.flush_line();
+        self.spool(b"\x1dV\x42\x50");
+        self.margin_lines = None;
+    }
+
+    pub fn vertical_margin(&mut self, height: usize) {
+        self.flush_line();
+        if let Some(margin_lines) = self.margin_lines.as_mut() {
+            *margin_lines = cmp::max(*margin_lines, height);
+        }
+    }
+
+    // Flush line buffer if non-empty
+    pub fn flush_line(&mut self) {
+        self.write_word();
         if self.line_width > 0 {
             self.spool_line();
         }
-
-        self.spool(b"\x1dV\x42\x50")
     }
 
-    fn spool_line(&mut self) {
+    pub fn spool_line(&mut self) {
+        if let Some(margin_lines) = self.margin_lines {
+            for _ in 0..margin_lines {
+                self.spool(b"\n");
+            }
+        }
+        self.margin_lines = Some(0);
+
         for pass in PASSES.iter() {
             if !self.active_for_line(pass) {
                 continue;
